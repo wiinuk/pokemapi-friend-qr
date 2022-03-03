@@ -1,5 +1,3 @@
-/* eslint-disable rulesdir/no-unused-await */
-
 import qrCode from "qrcode";
 
 function handleAsyncError(promise: Promise<void>) {
@@ -201,14 +199,7 @@ async function asyncMain() {
             }
         }
     }
-    // フレンド募集掲示板 ( 日本 )
-    if (document.URL.match(/https?:\/\/9db.jp\/pokemongo\/data\/4264/)) {
-        await appendTrainerCodeUI({ copyButton: false });
-    }
-    // フレンド募集掲示板 ( 海外 )
-    else {
-        await appendTrainerCodeUI();
-    }
+    await appendTrainerCodeUI();
 }
 export function main() {
     handleAsyncError(asyncMain());
