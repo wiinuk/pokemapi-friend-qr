@@ -10,11 +10,9 @@ import {
     meter,
     div,
     add,
-    sub,
     UnitKind,
     MulU,
     DivU,
-    sqrt,
     max,
     lt,
     withoutUnit,
@@ -24,6 +22,10 @@ import { addV2, distance, mulV2, normalizeV2, subV2, vector2 } from "./vector2";
 type px = Unit<"px">;
 const px: Id<px> = id;
 const meterParSeconds: Id<DivU<meter, seconds>> = id;
+
+function unreachable(): never {
+    throw new Error("unreachable");
+}
 
 function handleAsyncError(promise: Promise<void>) {
     promise.catch((error) => console.error(error));
@@ -85,8 +87,14 @@ type Renderer = (context: Readonly<RenderContext>) => void;
 let lastFrameCancellationHandle: number | null = null;
 const renderers: Renderer[] = [];
 const context: RenderContext = { frameTimeSpan: unit(0.1, seconds) };
+let lastTime = 0;
 function frameMainLoop(time: DOMHighResTimeStamp) {
-    context.frameTimeSpan = unit(time * 0.001, seconds);
+    // 前のフレームからの経過時間を測定
+    context.frameTimeSpan = unit(
+        lastTime === 0 ? 1 / 60 : (lastTime - time) * 0.001,
+        seconds
+    );
+    lastTime = time;
     for (const render of renderers) {
         render(context);
     }
@@ -158,6 +166,59 @@ function boundToShape(
     };
 }
 
+type MainPointerEvent = TouchEvent | MouseEvent;
+function addDragEventHandler(
+    element: HTMLElement,
+    options: {
+        onDragMove?(e: MainPointerEvent): void;
+        onDragStart?(e: MainPointerEvent): void;
+        onDragEnd?(e: MainPointerEvent): void;
+    } = {}
+) {
+    const { onDragMove, onDragStart, onDragEnd } = options;
+
+    element.addEventListener("mousedown", onDown, false);
+    element.addEventListener("touchstart", onDown, false);
+
+    function onDown(e: MainPointerEvent) {
+        onDragStart?.(e);
+        document.body.addEventListener("mousemove", onMove, false);
+        document.body.addEventListener("touchmove", onMove, false);
+    }
+    function onMove(e: MainPointerEvent) {
+        onDragMove?.(e);
+        e.preventDefault();
+
+        document.body.addEventListener("mouseup", onRelease, false);
+        document.body.addEventListener("touchend", onRelease, false);
+        document.body.addEventListener("touchcancel", onRelease, false);
+    }
+    function onRelease(e: MainPointerEvent) {
+        onDragEnd?.(e);
+
+        document.body.removeEventListener("mousemove", onMove, false);
+        document.body.removeEventListener("touchmove", onMove, false);
+
+        document.body.removeEventListener("mouseup", onRelease, false);
+        document.body.removeEventListener("touchend", onRelease, false);
+        document.body.removeEventListener("touchcancel", onRelease, false);
+    }
+}
+
+type SinglePointerEvent = MouseEvent | Touch;
+type SinglePointerEventWithUnit = {
+    [k in keyof SinglePointerEvent]: [SinglePointerEvent[k], k] extends [
+        number,
+        `x` | `y` | `${string}${`X` | `Y`}`
+    ]
+        ? numberWith<px>
+        : SinglePointerEvent[k];
+};
+function getSinglePointerEvent(e: MainPointerEvent) {
+    const r: SinglePointerEvent =
+        e instanceof TouchEvent ? e.changedTouches[0] ?? unreachable() : e;
+    return r as unknown as SinglePointerEventWithUnit;
+}
 async function asyncMain() {
     await waitElementLoaded();
 
@@ -167,6 +228,8 @@ async function asyncMain() {
     const qrCheckboxName = "qr-checkbox";
     const qrLabelName = "qr-label";
     const qrImageContainerName = "qr-image-container";
+    const qrChasingName = "qr-chasing";
+    const qrDraggingName = "qr-dragging";
     addStyle`
         .${idContainerName} {
             float: right;
@@ -184,17 +247,35 @@ async function asyncMain() {
             top: 50%;
             left: 50%;
             z-index: 9999;
+            cursor: grab;
 
             border-radius: 50%;
-            background: rgba(255, 255, 255, 20%);
+            background: rgb(255 255 255 / 20%);
             padding: 1.5em;
             box-shadow: 0 0.2em 1em 0.5em rgb(0 0 0 / 10%);
             border: solid 1px #ccc;
             backdrop-filter: blur(0.3em);
 
+            transition: background 1s, box-shadow 1s, border 1s;
+
             width: 0;
             height: 0;
             visibility: hidden;
+        }
+        .${qrImageContainerName}:hover {
+            background: rgb(192 164 197 / 20%);
+            box-shadow: 0 0.2em 1em 0.5em rgb(250 220 255 / 30%);
+            border: solid 1px #cab8cb;
+        }
+        .${qrImageContainerName}.${qrChasingName} {
+            background: rgb(131 179 193 / 20%);
+            box-shadow: 0 0.2em 1em 0.5em rgb(171 236 255 / 30%);
+            border: solid 1px #afc6c7;
+        }
+        .${qrImageContainerName}.${qrDraggingName} {
+            background: rgb(187 134 197 / 20%);
+            box-shadow: 0 0.2em 1em 0.5em rgb(243 177 255 / 30%);
+            border: solid 1px #c9a6cb;
         }
         .${qrCheckboxName}:checked + .${qrLabelName} + .${qrImageContainerName} {
             width: 4em;
@@ -234,7 +315,7 @@ async function asyncMain() {
     const toastListElement = document.createElement("ul");
     toastListElement.classList.add(toastListName);
     document.body.appendChild(toastListElement);
-    async function toast(message: string, { timeout = 3000 } = {}) {
+    async function toastAsync(message: string, { timeout = 3000 } = {}) {
         const item = document.createElement("li");
         item.innerText = message;
         item.classList.add(toastItemName);
@@ -242,6 +323,9 @@ async function asyncMain() {
         await sleep(timeout);
         item.parentElement?.removeChild(item);
     }
+    const toast: (...args: Parameters<typeof toastAsync>) => void = (...args) =>
+        handleAsyncError(toastAsync(...args));
+
     let nextCheckboxId = 0;
 
     /** `m/px` */
@@ -262,12 +346,11 @@ async function asyncMain() {
     async function createQRButton(code: string) {
         const qrButton = document.createElement("span");
         qrButton.classList.add(qrContainerName);
-        qrButton.title = "QR コードを表示";
 
         const checkboxId = `qr-checkbox-${nextCheckboxId++}`;
         qrButton.innerHTML = `
             <input type="checkbox" class="${qrCheckboxName}" id="${checkboxId}" />
-            <label type="button" class="${qrLabelName}" for="${checkboxId}">QR 📸</label>
+            <label type="button" class="${qrLabelName}" for="${checkboxId}" title="QR コードを表示">QR 📸</label>
             <div class="${qrImageContainerName}"></div>
         `;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -278,19 +361,57 @@ async function asyncMain() {
         const qrImage = await createQRCodeImage(code);
         qrImageContainer.appendChild(qrImage);
 
-        // 追いかけるときの加速度
-        type acceleration = DivU<meter, MulU<seconds, seconds>>;
-        const acceleration = unit<acceleration>(0.001, id);
+        // マウスの位置
+        let draggingTargetPosition: vector2<meter> | null = null;
+        addDragEventHandler(qrImageContainer, {
+            onDragMove(e) {
+                const info = getSinglePointerEvent(e);
+                draggingTargetPosition = vector2(
+                    mul(info.screenX, meterParPx),
+                    mul(info.screenY, meterParPx)
+                );
+            },
+            onDragStart() {
+                qrImageContainer.classList.add(qrDraggingName);
+            },
+            onDragEnd() {
+                qrImageContainer.classList.remove(qrDraggingName);
+                draggingTargetPosition = null;
+            },
+        });
+
+        const acceleration: Id<DivU<meter, MulU<seconds, seconds>>> = id;
+        // 親ボタンを追いかけるときの加速度
+        const targetAcceleration = unit(30, acceleration);
+        // マウスを追いかけるときの加速度
+        const draggingAcceleration = unit(500, acceleration);
         // 表示されていないので初期位置が不明
         let position: vector2<meter> | null = null;
         function createVelocity() {
+            const v = 100;
             return vector2(
-                unit((Math.random() - 0.5) * 0.05, meterParSeconds),
-                unit((Math.random() - 0.5) * 0.05, meterParSeconds)
+                unit((Math.random() - 0.5) * v, meterParSeconds),
+                unit((Math.random() - 0.5) * v, meterParSeconds)
             );
         }
         let velocity = createVelocity();
 
+        function addChaseVelocity(
+            context: Readonly<RenderContext>,
+            selfPosition: vector2<meter>,
+            targetPosition: vector2<meter>,
+            acceleration = targetAcceleration
+        ) {
+            // 対象への方向を計算
+            const direction = normalizeV2(subV2(targetPosition, selfPosition));
+
+            // 対象の方向へ加速
+            velocity = addV2(
+                velocity,
+                mulV2(mul(context.frameTimeSpan, acceleration), direction)
+            );
+        }
+        let previousChasing = false;
         const selfAnimator: Renderer = (context) => {
             // 自分と対象の形を決定
             const selfRect = getBoundingClientRect(qrImageContainer);
@@ -298,6 +419,10 @@ async function asyncMain() {
             const self = selfRect
                 ? boundToShape(selfRect, meterParPx)
                 : undefined;
+            if (self && position) {
+                self.center[0] = position[0];
+                self.center[1] = position[1];
+            }
             const target = targetRect
                 ? (() => {
                       const r = boundToShape(targetRect, meterParPx);
@@ -317,22 +442,48 @@ async function asyncMain() {
                 return;
             }
 
-            // 双方が表示されていて、接触していないなら対象を追いかける
-            if (self && target && !isCollision(target, self)) {
-                // 対象への方向を計算
-                const direction = normalizeV2(
-                    subV2(target.center, self.center)
+            // 双方が表示されていてドラッグされていないとき接触していないなら対象を追いかける
+            if (
+                self &&
+                target &&
+                !draggingTargetPosition &&
+                !isCollision(target, self)
+            ) {
+                if (!previousChasing) {
+                    qrImageContainer.classList.add(qrChasingName);
+                    previousChasing = true;
+                }
+                addChaseVelocity(
+                    context,
+                    self.center,
+                    target.center,
+                    targetAcceleration
                 );
-                // 対象の方向へ加速
-                velocity = addV2(
-                    velocity,
-                    mulV2(mul(context.frameTimeSpan, acceleration), direction)
+            } else {
+                if (previousChasing) {
+                    qrImageContainer.classList.remove(qrChasingName);
+                    previousChasing = false;
+                }
+            }
+            // ドラッグされているなら、マウスポインタを追いかける
+            if (self && draggingTargetPosition) {
+                addChaseVelocity(
+                    context,
+                    self.center,
+                    draggingTargetPosition,
+                    draggingAcceleration
                 );
             }
 
             // 物理演算
             // 空気抵抗
-            velocity = mulV2(velocity, unit(0.7));
+            velocity = mulV2(velocity, unit(0.95));
+            if (isNaN(withoutUnit(velocity[0]))) {
+                velocity[0] = unit(0, meterParSeconds);
+            }
+            if (isNaN(withoutUnit(velocity[1]))) {
+                velocity[1] = unit(0, meterParSeconds);
+            }
             // 移動
             position = addV2(position, mulV2(context.frameTimeSpan, velocity));
 
