@@ -3283,6 +3283,9 @@ var __values = (undefined && undefined.__values) || function(o) {
 
 var px = id;
 var meterParSeconds = id;
+function unreachable() {
+    throw new Error("unreachable");
+}
 function handleAsyncError(promise) {
     promise.catch(function (error) { return console.error(error); });
 }
@@ -3337,9 +3340,12 @@ function createQRCodeImage(code) {
 var lastFrameCancellationHandle = null;
 var renderers = [];
 var context = { frameTimeSpan: withUnit(0.1, seconds) };
+var lastTime = 0;
 function frameMainLoop(time) {
     var e_1, _a;
-    context.frameTimeSpan = withUnit(time * 0.001, seconds);
+    // 前のフレームからの経過時間を測定
+    context.frameTimeSpan = withUnit(lastTime === 0 ? 1 / 60 : (lastTime - time) * 0.001, seconds);
+    lastTime = time;
     try {
         for (var renderers_1 = __values(renderers), renderers_1_1 = renderers_1.next(); !renderers_1_1.done; renderers_1_1 = renderers_1.next()) {
             var render = renderers_1_1.value;
@@ -3403,9 +3409,40 @@ function boundToShape(rect, meterParPx) {
         radius: mul(max(rect.width, rect.height), mul(withUnit(0.5), meterParPx)),
     };
 }
+function addDragEventHandler(element, options) {
+    if (options === void 0) { options = {}; }
+    var onDragMove = options.onDragMove, onDragStart = options.onDragStart, onDragEnd = options.onDragEnd;
+    element.addEventListener("mousedown", onDown, false);
+    element.addEventListener("touchstart", onDown, false);
+    function onDown(e) {
+        onDragStart === null || onDragStart === void 0 ? void 0 : onDragStart(e);
+        document.body.addEventListener("mousemove", onMove, false);
+        document.body.addEventListener("touchmove", onMove, false);
+    }
+    function onMove(e) {
+        onDragMove === null || onDragMove === void 0 ? void 0 : onDragMove(e);
+        e.preventDefault();
+        document.body.addEventListener("mouseup", onRelease, false);
+        document.body.addEventListener("touchend", onRelease, false);
+        document.body.addEventListener("touchcancel", onRelease, false);
+    }
+    function onRelease(e) {
+        onDragEnd === null || onDragEnd === void 0 ? void 0 : onDragEnd(e);
+        document.body.removeEventListener("mousemove", onMove, false);
+        document.body.removeEventListener("touchmove", onMove, false);
+        document.body.removeEventListener("mouseup", onRelease, false);
+        document.body.removeEventListener("touchend", onRelease, false);
+        document.body.removeEventListener("touchcancel", onRelease, false);
+    }
+}
+function getSinglePointerEvent(e) {
+    var _a;
+    var r = e instanceof TouchEvent ? (_a = e.changedTouches[0]) !== null && _a !== void 0 ? _a : unreachable() : e;
+    return r;
+}
 function asyncMain() {
     return __awaiter(this, void 0, void 0, function () {
-        function toast(message, _a) {
+        function toastAsync(message, _a) {
             var _b;
             var _c = _a === void 0 ? {} : _a, _d = _c.timeout, timeout = _d === void 0 ? 3000 : _d;
             return __awaiter(this, void 0, void 0, function () {
@@ -3433,25 +3470,49 @@ function asyncMain() {
             var _a;
             return __awaiter(this, void 0, void 0, function () {
                 function createVelocity() {
-                    return vector2(withUnit((Math.random() - 0.5) * 0.05, meterParSeconds), withUnit((Math.random() - 0.5) * 0.05, meterParSeconds));
+                    var v = 100;
+                    return vector2(withUnit((Math.random() - 0.5) * v, meterParSeconds), withUnit((Math.random() - 0.5) * v, meterParSeconds));
                 }
-                var qrButton, checkboxId, qrImageContainer, qrImage, acceleration, position, velocity, selfAnimator;
+                function addChaseVelocity(context, selfPosition, targetPosition, acceleration) {
+                    if (acceleration === void 0) { acceleration = targetAcceleration; }
+                    // 対象への方向を計算
+                    var direction = normalizeV2(subV2(targetPosition, selfPosition));
+                    // 対象の方向へ加速
+                    velocity = addV2(velocity, mulV2(mul(context.frameTimeSpan, acceleration), direction));
+                }
+                var qrButton, checkboxId, qrImageContainer, qrImage, draggingTargetPosition, acceleration, targetAcceleration, draggingAcceleration, position, velocity, previousChasing, selfAnimator;
                 return __generator(this, function (_b) {
                     switch (_b.label) {
                         case 0:
                             qrButton = document.createElement("span");
                             qrButton.classList.add(qrContainerName);
-                            qrButton.title = "QR コードを表示";
                             checkboxId = "qr-checkbox-".concat(nextCheckboxId++);
-                            qrButton.innerHTML = "\n            <input type=\"checkbox\" class=\"".concat(qrCheckboxName, "\" id=\"").concat(checkboxId, "\" />\n            <label type=\"button\" class=\"").concat(qrLabelName, "\" for=\"").concat(checkboxId, "\">QR \uD83D\uDCF8</label>\n            <div class=\"").concat(qrImageContainerName, "\"></div>\n        ");
+                            qrButton.innerHTML = "\n            <input type=\"checkbox\" class=\"".concat(qrCheckboxName, "\" id=\"").concat(checkboxId, "\" />\n            <label type=\"button\" class=\"").concat(qrLabelName, "\" for=\"").concat(checkboxId, "\" title=\"QR \u30B3\u30FC\u30C9\u3092\u8868\u793A\">QR \uD83D\uDCF8</label>\n            <div class=\"").concat(qrImageContainerName, "\"></div>\n        ");
                             qrImageContainer = qrButton.querySelector(".".concat(qrImageContainerName));
                             return [4 /*yield*/, createQRCodeImage(code)];
                         case 1:
                             qrImage = _b.sent();
                             qrImageContainer.appendChild(qrImage);
-                            acceleration = withUnit(0.001, id);
+                            draggingTargetPosition = null;
+                            addDragEventHandler(qrImageContainer, {
+                                onDragMove: function (e) {
+                                    var info = getSinglePointerEvent(e);
+                                    draggingTargetPosition = vector2(mul(info.screenX, meterParPx), mul(info.screenY, meterParPx));
+                                },
+                                onDragStart: function () {
+                                    qrImageContainer.classList.add(qrDraggingName);
+                                },
+                                onDragEnd: function () {
+                                    qrImageContainer.classList.remove(qrDraggingName);
+                                    draggingTargetPosition = null;
+                                },
+                            });
+                            acceleration = id;
+                            targetAcceleration = withUnit(30, acceleration);
+                            draggingAcceleration = withUnit(500, acceleration);
                             position = null;
                             velocity = createVelocity();
+                            previousChasing = false;
                             selfAnimator = function (context) {
                                 // 自分と対象の形を決定
                                 var selfRect = getBoundingClientRect(qrImageContainer);
@@ -3459,6 +3520,10 @@ function asyncMain() {
                                 var self = selfRect
                                     ? boundToShape(selfRect, meterParPx)
                                     : undefined;
+                                if (self && position) {
+                                    self.center[0] = position[0];
+                                    self.center[1] = position[1];
+                                }
                                 var target = targetRect
                                     ? (function () {
                                         var r = boundToShape(targetRect, meterParPx);
@@ -3476,16 +3541,36 @@ function asyncMain() {
                                 if (position === null) {
                                     return;
                                 }
-                                // 双方が表示されていて、接触していないなら対象を追いかける
-                                if (self && target && !isCollision(target, self)) {
-                                    // 対象への方向を計算
-                                    var direction = normalizeV2(subV2(target.center, self.center));
-                                    // 対象の方向へ加速
-                                    velocity = addV2(velocity, mulV2(mul(context.frameTimeSpan, acceleration), direction));
+                                // 双方が表示されていてドラッグされていないとき接触していないなら対象を追いかける
+                                if (self &&
+                                    target &&
+                                    !draggingTargetPosition &&
+                                    !isCollision(target, self)) {
+                                    if (!previousChasing) {
+                                        qrImageContainer.classList.add(qrChasingName);
+                                        previousChasing = true;
+                                    }
+                                    addChaseVelocity(context, self.center, target.center, targetAcceleration);
+                                }
+                                else {
+                                    if (previousChasing) {
+                                        qrImageContainer.classList.remove(qrChasingName);
+                                        previousChasing = false;
+                                    }
+                                }
+                                // ドラッグされているなら、マウスポインタを追いかける
+                                if (self && draggingTargetPosition) {
+                                    addChaseVelocity(context, self.center, draggingTargetPosition, draggingAcceleration);
                                 }
                                 // 物理演算
                                 // 空気抵抗
-                                velocity = mulV2(velocity, withUnit(0.7));
+                                velocity = mulV2(velocity, withUnit(0.95));
+                                if (isNaN(withoutUnit(velocity[0]))) {
+                                    velocity[0] = withUnit(0, meterParSeconds);
+                                }
+                                if (isNaN(withoutUnit(velocity[1]))) {
+                                    velocity[1] = withUnit(0, meterParSeconds);
+                                }
                                 // 移動
                                 position = addV2(position, mulV2(context.frameTimeSpan, velocity));
                                 // スタイルを設定
@@ -3573,7 +3658,7 @@ function asyncMain() {
                 });
             });
         }
-        var idContainerName, qrNumberName, qrContainerName, qrCheckboxName, qrLabelName, qrImageContainerName, toastListName, toastItemName, toastListElement, nextCheckboxId, meterParPx;
+        var idContainerName, qrNumberName, qrContainerName, qrCheckboxName, qrLabelName, qrImageContainerName, qrChasingName, qrDraggingName, toastListName, toastItemName, toastListElement, toast, nextCheckboxId, meterParPx;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, waitElementLoaded()];
@@ -3585,13 +3670,22 @@ function asyncMain() {
                     qrCheckboxName = "qr-checkbox";
                     qrLabelName = "qr-label";
                     qrImageContainerName = "qr-image-container";
-                    addStyle(templateObject_1 || (templateObject_1 = __makeTemplateObject(["\n        .", " {\n            float: right;\n            display: flex;\n            padding: 0;\n            margin: 0 0.5em;\n            border: 2px solid #ddd;\n        }\n        .", " {\n            padding: 0 0.5em;\n            border-right: 2px dashed #ddd;\n        }\n        .", " {\n            position: fixed;\n            top: 50%;\n            left: 50%;\n            z-index: 9999;\n\n            border-radius: 50%;\n            background: rgba(255, 255, 255, 20%);\n            padding: 1.5em;\n            box-shadow: 0 0.2em 1em 0.5em rgb(0 0 0 / 10%);\n            border: solid 1px #ccc;\n            backdrop-filter: blur(0.3em);\n\n            width: 0;\n            height: 0;\n            visibility: hidden;\n        }\n        .", ":checked + .", " + .", " {\n            width: 4em;\n            height: 4em;\n            visibility: visible;\n        }\n        .", " {\n            display: none;\n        }\n        "], ["\n        .", " {\n            float: right;\n            display: flex;\n            padding: 0;\n            margin: 0 0.5em;\n            border: 2px solid #ddd;\n        }\n        .", " {\n            padding: 0 0.5em;\n            border-right: 2px dashed #ddd;\n        }\n        .", " {\n            position: fixed;\n            top: 50%;\n            left: 50%;\n            z-index: 9999;\n\n            border-radius: 50%;\n            background: rgba(255, 255, 255, 20%);\n            padding: 1.5em;\n            box-shadow: 0 0.2em 1em 0.5em rgb(0 0 0 / 10%);\n            border: solid 1px #ccc;\n            backdrop-filter: blur(0.3em);\n\n            width: 0;\n            height: 0;\n            visibility: hidden;\n        }\n        .", ":checked + .", " + .", " {\n            width: 4em;\n            height: 4em;\n            visibility: visible;\n        }\n        .", " {\n            display: none;\n        }\n        "])), idContainerName, qrNumberName, qrImageContainerName, qrCheckboxName, qrLabelName, qrImageContainerName, qrCheckboxName);
+                    qrChasingName = "qr-chasing";
+                    qrDraggingName = "qr-dragging";
+                    addStyle(templateObject_1 || (templateObject_1 = __makeTemplateObject(["\n        .", " {\n            float: right;\n            display: flex;\n            padding: 0;\n            margin: 0 0.5em;\n            border: 2px solid #ddd;\n        }\n        .", " {\n            padding: 0 0.5em;\n            border-right: 2px dashed #ddd;\n        }\n        .", " {\n            position: fixed;\n            top: 50%;\n            left: 50%;\n            z-index: 9999;\n            cursor: grab;\n\n            border-radius: 50%;\n            background: rgb(255 255 255 / 20%);\n            padding: 1.5em;\n            box-shadow: 0 0.2em 1em 0.5em rgb(0 0 0 / 10%);\n            border: solid 1px #ccc;\n            backdrop-filter: blur(0.3em);\n\n            transition: background 1s, box-shadow 1s, border 1s;\n\n            width: 0;\n            height: 0;\n            visibility: hidden;\n        }\n        .", ":hover {\n            background: rgb(192 164 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(250 220 255 / 30%);\n            border: solid 1px #cab8cb;\n        }\n        .", ".", " {\n            background: rgb(131 179 193 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(171 236 255 / 30%);\n            border: solid 1px #afc6c7;\n        }\n        .", ".", " {\n            background: rgb(187 134 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(243 177 255 / 30%);\n            border: solid 1px #c9a6cb;\n        }\n        .", ":checked + .", " + .", " {\n            width: 4em;\n            height: 4em;\n            visibility: visible;\n        }\n        .", " {\n            display: none;\n        }\n        "], ["\n        .", " {\n            float: right;\n            display: flex;\n            padding: 0;\n            margin: 0 0.5em;\n            border: 2px solid #ddd;\n        }\n        .", " {\n            padding: 0 0.5em;\n            border-right: 2px dashed #ddd;\n        }\n        .", " {\n            position: fixed;\n            top: 50%;\n            left: 50%;\n            z-index: 9999;\n            cursor: grab;\n\n            border-radius: 50%;\n            background: rgb(255 255 255 / 20%);\n            padding: 1.5em;\n            box-shadow: 0 0.2em 1em 0.5em rgb(0 0 0 / 10%);\n            border: solid 1px #ccc;\n            backdrop-filter: blur(0.3em);\n\n            transition: background 1s, box-shadow 1s, border 1s;\n\n            width: 0;\n            height: 0;\n            visibility: hidden;\n        }\n        .", ":hover {\n            background: rgb(192 164 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(250 220 255 / 30%);\n            border: solid 1px #cab8cb;\n        }\n        .", ".", " {\n            background: rgb(131 179 193 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(171 236 255 / 30%);\n            border: solid 1px #afc6c7;\n        }\n        .", ".", " {\n            background: rgb(187 134 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(243 177 255 / 30%);\n            border: solid 1px #c9a6cb;\n        }\n        .", ":checked + .", " + .", " {\n            width: 4em;\n            height: 4em;\n            visibility: visible;\n        }\n        .", " {\n            display: none;\n        }\n        "])), idContainerName, qrNumberName, qrImageContainerName, qrImageContainerName, qrImageContainerName, qrChasingName, qrImageContainerName, qrDraggingName, qrCheckboxName, qrLabelName, qrImageContainerName, qrCheckboxName);
                     toastListName = "qr-toast-list";
                     toastItemName = "qr-toast-item";
                     addStyle(templateObject_2 || (templateObject_2 = __makeTemplateObject(["\n        .", " {\n            position: fixed;\n            right: 0;\n            bottom: 0;\n            z-index: 9999;\n            list-style: none;\n            padding: 0;\n            margin: 0;\n        }\n        .", ":first-of-type {\n            border-top: 1px solid #ddd;\n        }\n        .", " {\n            background-color: white;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            border-top: 1px dashed #ccc;\n            margin: 0 0.5em;\n            padding: 1em;\n            box-shadow: 0 2px 2px rgb(0 0 0 / 50%);\n        }\n    "], ["\n        .", " {\n            position: fixed;\n            right: 0;\n            bottom: 0;\n            z-index: 9999;\n            list-style: none;\n            padding: 0;\n            margin: 0;\n        }\n        .", ":first-of-type {\n            border-top: 1px solid #ddd;\n        }\n        .", " {\n            background-color: white;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            border-top: 1px dashed #ccc;\n            margin: 0 0.5em;\n            padding: 1em;\n            box-shadow: 0 2px 2px rgb(0 0 0 / 50%);\n        }\n    "])), toastListName, toastItemName, toastItemName);
                     toastListElement = document.createElement("ul");
                     toastListElement.classList.add(toastListName);
                     document.body.appendChild(toastListElement);
+                    toast = function () {
+                        var args = [];
+                        for (var _i = 0; _i < arguments.length; _i++) {
+                            args[_i] = arguments[_i];
+                        }
+                        return handleAsyncError(toastAsync.apply(void 0, __spreadArray([], __read(args), false)));
+                    };
                     nextCheckboxId = 0;
                     meterParPx = (function () {
                         var x = document.createElement("div");
