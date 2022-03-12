@@ -2,7 +2,7 @@
 // @name         Pokemapi Friend QR
 // @namespace    https://github.com/wiinuk/pokemapi-friend-qr
 // @homepageURL  https://github.com/wiinuk/pokemapi-friend-qr
-// @version      0.1.2
+// @version      0.2.1
 // @description  Add QR code to friend list
 // @author       Wiinuk
 // @match        https://pokemongo-get.com/global_code/*
