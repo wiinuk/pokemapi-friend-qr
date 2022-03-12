@@ -3395,16 +3395,8 @@ function isCollision(c1, c2) {
     return lt(distance(c1.center, c2.center), add(c1.radius, c2.radius));
 }
 function boundToShape(rect, meterParPx) {
-    if (rect == null) {
-        return;
-    }
     return {
-        center: [
-            mul(rect.left, meterParPx),
-            mul(rect.top, meterParPx),
-            // mul(mul(add(rect.left, rect.right), unit(0.5)), meterParPx),
-            // mul(mul(add(rect.top, rect.bottom), unit(0.5)), meterParPx),
-        ],
+        center: vector2(mul(mul(add(rect.right, rect.left), withUnit(0.5)), meterParPx), mul(mul(add(rect.bottom, rect.top), withUnit(0.5)), meterParPx)),
         radius: mul(max(rect.width, rect.height), mul(withUnit(0.5), meterParPx)),
     };
 }
@@ -3462,6 +3454,13 @@ function asyncMain() {
                 });
             });
         }
+        function toast() {
+            var args = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                args[_i] = arguments[_i];
+            }
+            handleAsyncError(toastAsync.apply(void 0, __spreadArray([], __read(args), false)));
+        }
         function toCssPosition(x) {
             return Math.round(withoutUnit(div(x, meterParPx))) + "px";
         }
@@ -3479,7 +3478,7 @@ function asyncMain() {
                     // 対象の方向へ加速
                     velocity = addV2(velocity, mulV2(mul(context.frameTimeSpan, acceleration), direction));
                 }
-                var qrButton, checkboxId, qrImageContainer, qrImage, draggingTargetPosition, acceleration, targetAcceleration, draggingAcceleration, position, velocity, previousChasing, selfAnimator;
+                var qrButton, checkboxId, qrImageContainer, qrImage, draggingInfo, acceleration, targetAcceleration, draggingAcceleration, position, velocity, previousChasing, selfAnimator;
                 return __generator(this, function (_b) {
                     switch (_b.label) {
                         case 0:
@@ -3492,18 +3491,31 @@ function asyncMain() {
                         case 1:
                             qrImage = _b.sent();
                             qrImageContainer.appendChild(qrImage);
-                            draggingTargetPosition = null;
+                            draggingInfo = null;
                             addDragEventHandler(qrImageContainer, {
                                 onDragMove: function (e) {
                                     var info = getSinglePointerEvent(e);
-                                    draggingTargetPosition = vector2(mul(info.screenX, meterParPx), mul(info.screenY, meterParPx));
+                                    if (draggingInfo) {
+                                        draggingInfo.position = vector2(mul(info.clientX, meterParPx), mul(info.clientY, meterParPx));
+                                    }
                                 },
-                                onDragStart: function () {
+                                onDragStart: function (e) {
+                                    var _a;
                                     qrImageContainer.classList.add(qrDraggingName);
+                                    var info = getSinglePointerEvent(e);
+                                    // マウスの位置
+                                    var position = vector2(mul(info.clientX, meterParPx), mul(info.clientY, meterParPx));
+                                    // どこをつかんでいるか求める
+                                    var elementPosition = boundToShape((_a = getBoundingClientRect(qrImageContainer)) !== null && _a !== void 0 ? _a : unreachable(), meterParPx).center;
+                                    var offset = subV2(position, elementPosition);
+                                    draggingInfo = {
+                                        offset: offset,
+                                        position: position,
+                                    };
                                 },
                                 onDragEnd: function () {
                                     qrImageContainer.classList.remove(qrDraggingName);
-                                    draggingTargetPosition = null;
+                                    draggingInfo = null;
                                 },
                             });
                             acceleration = id;
@@ -3526,9 +3538,6 @@ function asyncMain() {
                                 var target = targetRect
                                     ? (function () {
                                         var r = boundToShape(targetRect, meterParPx);
-                                        if (!r) {
-                                            return;
-                                        }
                                         return __assign(__assign({}, r), { radius: mul(r.radius, withUnit(2)) });
                                     })()
                                     : undefined;
@@ -3541,10 +3550,7 @@ function asyncMain() {
                                     return;
                                 }
                                 // 双方が表示されていてドラッグされていないとき接触していないなら対象を追いかける
-                                if (self &&
-                                    target &&
-                                    !draggingTargetPosition &&
-                                    !isCollision(target, self)) {
+                                if (self && target && !draggingInfo && !isCollision(target, self)) {
                                     if (!previousChasing) {
                                         qrImageContainer.classList.add(qrChasingName);
                                         previousChasing = true;
@@ -3558,8 +3564,10 @@ function asyncMain() {
                                     }
                                 }
                                 // ドラッグされているなら、マウスポインタを追いかける
-                                if (self && draggingTargetPosition) {
-                                    addChaseVelocity(context, self.center, draggingTargetPosition, draggingAcceleration);
+                                if (self && draggingInfo) {
+                                    // つかんだ位置を追いかける
+                                    var targetPosition = subV2(draggingInfo.position, draggingInfo.offset);
+                                    addChaseVelocity(context, self.center, targetPosition, draggingAcceleration);
                                 }
                                 // 物理演算
                                 // 空気抵抗
@@ -3657,7 +3665,7 @@ function asyncMain() {
                 });
             });
         }
-        var idContainerName, qrNumberName, qrContainerName, qrCheckboxName, qrLabelName, qrImageContainerName, qrChasingName, qrDraggingName, toastListName, toastItemName, toastListElement, toast, nextCheckboxId, meterParPx;
+        var idContainerName, qrNumberName, qrContainerName, qrCheckboxName, qrLabelName, qrImageContainerName, qrChasingName, qrDraggingName, toastListName, toastItemName, toastListElement, nextCheckboxId, meterParPx;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, waitElementLoaded()];
@@ -3678,13 +3686,6 @@ function asyncMain() {
                     toastListElement = document.createElement("ul");
                     toastListElement.classList.add(toastListName);
                     document.body.appendChild(toastListElement);
-                    toast = function () {
-                        var args = [];
-                        for (var _i = 0; _i < arguments.length; _i++) {
-                            args[_i] = arguments[_i];
-                        }
-                        return handleAsyncError(toastAsync.apply(void 0, __spreadArray([], __read(args), false)));
-                    };
                     nextCheckboxId = 0;
                     meterParPx = (function () {
                         var x = document.createElement("div");
