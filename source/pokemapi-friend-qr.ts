@@ -151,17 +151,12 @@ function isCollision<u extends UnitKind>(c1: Circle<u>, c2: Circle<u>) {
 function boundToShape(
     rect: DOMRectWithUnit,
     meterParPx: numberWith<DivU<meter, px>>
-): Circle<meter> | undefined {
-    if (rect == null) {
-        return;
-    }
+): Circle<meter> {
     return {
-        center: [
-            mul(rect.left, meterParPx),
-            mul(rect.top, meterParPx),
-            // mul(mul(add(rect.left, rect.right), unit(0.5)), meterParPx),
-            // mul(mul(add(rect.top, rect.bottom), unit(0.5)), meterParPx),
-        ],
+        center: vector2(
+            mul(mul(add(rect.right, rect.left), unit(0.5)), meterParPx),
+            mul(mul(add(rect.bottom, rect.top), unit(0.5)), meterParPx)
+        ),
         radius: mul(max(rect.width, rect.height), mul(unit(0.5), meterParPx)),
     };
 }
@@ -323,8 +318,9 @@ async function asyncMain() {
         await sleep(timeout);
         item.parentElement?.removeChild(item);
     }
-    const toast: (...args: Parameters<typeof toastAsync>) => void = (...args) =>
+    function toast(...args: Parameters<typeof toastAsync>) {
         handleAsyncError(toastAsync(...args));
+    }
 
     let nextCheckboxId = 0;
 
@@ -361,22 +357,48 @@ async function asyncMain() {
         const qrImage = await createQRCodeImage(code);
         qrImageContainer.appendChild(qrImage);
 
-        // マウスの位置
-        let draggingTargetPosition: vector2<meter> | null = null;
+        interface DraggingInfo {
+            /** ドラッグ対象の要素の中心座標とマウスが押された座標の差 */
+            readonly offset: vector2<meter>;
+            /** 現在のマウスの位置 */
+            position: vector2<meter>;
+        }
+        let draggingInfo: DraggingInfo | null = null;
         addDragEventHandler(qrImageContainer, {
             onDragMove(e) {
                 const info = getSinglePointerEvent(e);
-                draggingTargetPosition = vector2(
-                    mul(info.screenX, meterParPx),
-                    mul(info.screenY, meterParPx)
-                );
+                if (draggingInfo) {
+                    draggingInfo.position = vector2(
+                        mul(info.clientX, meterParPx),
+                        mul(info.clientY, meterParPx)
+                    );
+                }
             },
-            onDragStart() {
+            onDragStart(e) {
                 qrImageContainer.classList.add(qrDraggingName);
+                const info = getSinglePointerEvent(e);
+
+                // マウスの位置
+                const position = vector2(
+                    mul(info.clientX, meterParPx),
+                    mul(info.clientY, meterParPx)
+                );
+
+                // どこをつかんでいるか求める
+                const { center: elementPosition } = boundToShape(
+                    getBoundingClientRect(qrImageContainer) ?? unreachable(),
+                    meterParPx
+                );
+                const offset = subV2(position, elementPosition);
+
+                draggingInfo = {
+                    offset,
+                    position,
+                };
             },
             onDragEnd() {
                 qrImageContainer.classList.remove(qrDraggingName);
-                draggingTargetPosition = null;
+                draggingInfo = null;
             },
         });
 
@@ -426,9 +448,6 @@ async function asyncMain() {
             const target = targetRect
                 ? (() => {
                       const r = boundToShape(targetRect, meterParPx);
-                      if (!r) {
-                          return;
-                      }
                       return { ...r, radius: mul(r.radius, unit(2)) };
                   })()
                 : undefined;
@@ -443,12 +462,7 @@ async function asyncMain() {
             }
 
             // 双方が表示されていてドラッグされていないとき接触していないなら対象を追いかける
-            if (
-                self &&
-                target &&
-                !draggingTargetPosition &&
-                !isCollision(target, self)
-            ) {
+            if (self && target && !draggingInfo && !isCollision(target, self)) {
                 if (!previousChasing) {
                     qrImageContainer.classList.add(qrChasingName);
                     previousChasing = true;
@@ -466,11 +480,16 @@ async function asyncMain() {
                 }
             }
             // ドラッグされているなら、マウスポインタを追いかける
-            if (self && draggingTargetPosition) {
+            if (self && draggingInfo) {
+                // つかんだ位置を追いかける
+                const targetPosition = subV2(
+                    draggingInfo.position,
+                    draggingInfo.offset
+                );
                 addChaseVelocity(
                     context,
                     self.center,
-                    draggingTargetPosition,
+                    targetPosition,
                     draggingAcceleration
                 );
             }
