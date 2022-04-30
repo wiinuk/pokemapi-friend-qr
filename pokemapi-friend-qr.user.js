@@ -3,7 +3,7 @@
 // @name         Pokemapi Friend QR
 // @namespace    https://github.com/wiinuk/pokemapi-friend-qr
 // @homepageURL  https://github.com/wiinuk/pokemapi-friend-qr
-// @version      0.2.1
+// @version      0.2.3
 // @description  Add QR code to friend list
 // @author       Wiinuk
 // @match        https://pokemongo-get.com/global_code/*
@@ -3127,18 +3127,22 @@ function withoutUnit(value) {
 }
 var seconds = id;
 var meter = id;
+var kilogram = id;
 // -------------- 標準 API 拡張 --------------
-function add(n1, n2) {
+function units_add(n1, n2) {
     return withUnit(withoutUnit(n1) + withoutUnit(n2), id);
 }
 function sub(n1, n2) {
     return withUnit(withoutUnit(n1) - withoutUnit(n2), id);
 }
-function mul(n1, n2) {
+function units_mul(n1, n2) {
     return withUnit(withoutUnit(n1) * withoutUnit(n2), id);
 }
 function div(n1, n2) {
     return withUnit(withoutUnit(n1) / withoutUnit(n2), id);
+}
+function neg(n) {
+    return withUnit(-withoutUnit(n), id);
 }
 function lt(n1, n2) {
     return withoutUnit(n1) < withoutUnit(n2);
@@ -3149,51 +3153,98 @@ function sqrt(x) {
 function max(x1, x2) {
     return withUnit(Math.max(withoutUnit(x1), withoutUnit(x2)), id);
 }
+function min(x1, x2) {
+    return withUnit(Math.min(withoutUnit(x1), withoutUnit(x2)), id);
+}
 
 ;// CONCATENATED MODULE: ./source/vector2.ts
 
 function vector2(x, y) {
     return [x, y];
 }
-function subV2(x1, x2) {
-    return [sub(x1[0], x2[0]), sub(x1[1], x2[1])];
+function subV2(x1, x2, result) {
+    if (result === void 0) { result = [withUnit(0, id), withUnit(0, id)]; }
+    result[0] = sub(x1[0], x2[0]);
+    result[1] = sub(x1[1], x2[1]);
+    return result;
 }
-function addV2(x1, x2) {
-    return [add(x1[0], x2[0]), add(x1[1], x2[1])];
+function addV2(x1, x2, result) {
+    if (result === void 0) { result = [withUnit(0, id), withUnit(0, id)]; }
+    result[0] = units_add(x1[0], x2[0]);
+    result[1] = units_add(x1[1], x2[1]);
+    return result;
 }
-function mulV2(x1, x2) {
-    if (Array.isArray(x1)) {
-        if (Array.isArray(x2)) {
-            return [mul(x1[0], x2[0]), mul(x1[1], x2[1])];
+function isNumberWithUnit(x) {
+    return typeof x === "number";
+}
+function mulV2(x1, x2, result) {
+    if (result === void 0) { result = [withUnit(0, id), withUnit(0, id)]; }
+    if (!isNumberWithUnit(x1)) {
+        if (!isNumberWithUnit(x2)) {
+            result[0] = units_mul(x1[0], x2[0]);
+            result[1] = units_mul(x1[1], x2[1]);
         }
         else {
-            return [mul(x1[0], x2), mul(x1[1], x2)];
+            result[0] = units_mul(x1[0], x2);
+            result[1] = units_mul(x1[1], x2);
         }
     }
     else {
-        if (Array.isArray(x2)) {
-            return [mul(x1, x2[0]), mul(x1, x2[1])];
+        if (!isNumberWithUnit(x2)) {
+            result[0] = units_mul(x1, x2[0]);
+            result[1] = units_mul(x1, x2[1]);
         }
         else {
-            return [mul(x1, x2), mul(x1, x2)];
+            result[0] = units_mul(x1, x2);
+            result[1] = units_mul(x1, x2);
         }
     }
+    return result;
 }
-function normalizeV2(x) {
-    var length = sqrt(add(mul(x[0], x[0]), mul(x[1], x[1])));
-    return [div(x[0], length), div(x[1], length)];
+function divV2(x1, x2, result) {
+    if (result === void 0) { result = [withUnit(0, id), withUnit(0, id)]; }
+    if (!isNumberWithUnit(x1)) {
+        if (!isNumberWithUnit(x2)) {
+            result[0] = div(x1[0], x2[0]);
+            result[1] = div(x1[1], x2[1]);
+        }
+        else {
+            result[0] = div(x1[0], x2);
+            result[1] = div(x1[1], x2);
+        }
+    }
+    else {
+        if (!isNumberWithUnit(x2)) {
+            result[0] = div(x1, x2[0]);
+            result[1] = div(x1, x2[1]);
+        }
+        else {
+            result[0] = div(x1, x2);
+            result[1] = div(x1, x2);
+        }
+    }
+    return result;
+}
+function normalizeV2(x, result) {
+    if (result === void 0) { result = [withUnit(0), withUnit(0)]; }
+    var length = sqrt(units_add(units_mul(x[0], x[0]), units_mul(x[1], x[1])));
+    result[0] = div(x[0], length);
+    result[1] = div(x[1], length);
+    return result;
 }
 function distance(p1, p2) {
     var dx = sub(p1[0], p2[0]);
     var dy = sub(p1[1], p2[1]);
-    return sqrt(add(mul(dx, dx), mul(dy, dy)));
+    return sqrt(units_add(units_mul(dx, dx), units_mul(dy, dy)));
+}
+function lengthV2(x) {
+    return sqrt(units_add(units_mul(x[0], x[0]), units_mul(x[1], x[1])));
+}
+function dotV2(x1, x2) {
+    return add(mul(x1[0], x2[0]), mul(x1[1], x2[1]));
 }
 
-;// CONCATENATED MODULE: ./source/pokemapi-friend-qr.ts
-var __makeTemplateObject = (undefined && undefined.__makeTemplateObject) || function (cooked, raw) {
-    if (Object.defineProperty) { Object.defineProperty(cooked, "raw", { value: raw }); } else { cooked.raw = raw; }
-    return cooked;
-};
+;// CONCATENATED MODULE: ./source/physical-element-animator.ts
 var __assign = (undefined && undefined.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -3204,6 +3255,448 @@ var __assign = (undefined && undefined.__assign) || function () {
         return t;
     };
     return __assign.apply(this, arguments);
+};
+var __values = (undefined && undefined.__values) || function(o) {
+    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+    if (m) return m.call(o);
+    if (o && typeof o.length === "number") return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+};
+
+
+var px = id;
+var meterParSeconds = id;
+function unreachable() {
+    throw new Error("unreachable");
+}
+function exhaustive(_) {
+    throw new Error("exhaustive");
+}
+function isCollision(c1, c2) {
+    return lt(distance(c1.center, c2.center), units_add(c1.radius, c2.radius));
+}
+function getBoundingClientRect(element) {
+    if (element.parentElement === null) {
+        return;
+    }
+    var style = getComputedStyle(element);
+    if (style.visibility === "hidden") {
+        return;
+    }
+    return element.getBoundingClientRect();
+}
+function boundToShape(rect, meterParPx) {
+    return {
+        center: vector2(units_mul(units_mul(units_add(rect.right, rect.left), withUnit(0.5)), meterParPx), units_mul(units_mul(units_add(rect.bottom, rect.top), withUnit(0.5)), meterParPx)),
+        radius: units_mul(max(rect.width, rect.height), units_mul(withUnit(0.5), meterParPx)),
+    };
+}
+function addDragEventHandler(element, options) {
+    if (options === void 0) { options = {}; }
+    var onDragMove = options.onDragMove, onDragStart = options.onDragStart, onDragEnd = options.onDragEnd;
+    element.addEventListener("mousedown", onDown, false);
+    element.addEventListener("touchstart", onDown, false);
+    function onDown(e) {
+        onDragStart === null || onDragStart === void 0 ? void 0 : onDragStart(e);
+        document.body.addEventListener("mousemove", onMove, false);
+        document.body.addEventListener("touchmove", onMove, false);
+    }
+    function onMove(e) {
+        onDragMove === null || onDragMove === void 0 ? void 0 : onDragMove(e);
+        e.preventDefault();
+        document.body.addEventListener("mouseup", onRelease, false);
+        document.body.addEventListener("touchend", onRelease, false);
+        document.body.addEventListener("touchcancel", onRelease, false);
+    }
+    function onRelease(e) {
+        onDragEnd === null || onDragEnd === void 0 ? void 0 : onDragEnd(e);
+        document.body.removeEventListener("mousemove", onMove, false);
+        document.body.removeEventListener("touchmove", onMove, false);
+        document.body.removeEventListener("mouseup", onRelease, false);
+        document.body.removeEventListener("touchend", onRelease, false);
+        document.body.removeEventListener("touchcancel", onRelease, false);
+    }
+}
+function getSinglePointerEvent(e) {
+    var _a;
+    var r = e instanceof TouchEvent ? (_a = e.changedTouches[0]) !== null && _a !== void 0 ? _a : unreachable() : e;
+    return r;
+}
+var renderContext = {
+    frameTimeSpan: withUnit(0.1, seconds),
+};
+var lastTime = 0;
+function startRenderLoop(time) {
+    var e_1, _a;
+    // 前のフレームからの経過時間を測定
+    renderContext.frameTimeSpan = withUnit(lastTime === 0 ? 1 / 60 : (lastTime - time) * 0.001, seconds);
+    lastTime = time;
+    try {
+        for (var renderers_1 = __values(renderers), renderers_1_1 = renderers_1.next(); !renderers_1_1.done; renderers_1_1 = renderers_1.next()) {
+            var render = renderers_1_1.value;
+            render(renderContext);
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (renderers_1_1 && !renderers_1_1.done && (_a = renderers_1.return)) _a.call(renderers_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    renderLoopCancellation = globalThis.requestAnimationFrame(startRenderLoop);
+}
+var renderers = [];
+var renderLoopCancellation = null;
+function addRenderer(render) {
+    if (renderers.length === 0) {
+        globalThis.requestAnimationFrame(startRenderLoop);
+        console.debug("アニメーションループ開始");
+    }
+    renderers.push(render);
+}
+function removeRenderer(render) {
+    renderers.splice(renderers.indexOf(render), 1);
+    if (renderers.length === 0) {
+        if (renderLoopCancellation !== null) {
+            globalThis.cancelAnimationFrame(renderLoopCancellation);
+            console.debug("アニメーションループ停止");
+        }
+        renderLoopCancellation = null;
+    }
+}
+var colliders = new Set();
+var updateLoopCancellation = null;
+var updateInterval = withUnit(1 / 60, seconds);
+function addCollider(collider) {
+    if (colliders.size === 0) {
+        updateLoopCancellation = globalThis.setInterval(updateFrame, withoutUnit(updateInterval) * 1000);
+        console.debug("物理演算ループ開始");
+    }
+    colliders.add(collider);
+}
+function removeCollider(collider) {
+    colliders.delete(collider);
+    if (colliders.size === 0) {
+        if (updateLoopCancellation !== null) {
+            globalThis.clearTimeout(updateLoopCancellation);
+            console.debug("物理演算ループ停止");
+        }
+        updateLoopCancellation = null;
+    }
+}
+var updateContext = {
+    frameTimeSpan: withUnit(0.1, seconds),
+};
+var lastUpdateTime = 0;
+function updateFrame() {
+    var time = performance.now();
+    updateContext.frameTimeSpan =
+        lastUpdateTime === 0
+            ? updateInterval
+            : withUnit((lastUpdateTime - time) * 0.001, seconds);
+    lastUpdateTime = time;
+    processCollision();
+    updatePosition(updateContext);
+}
+var checkedCollisions = new Set();
+var contact = {
+    isIntersecting: false,
+    normal: vector2(withUnit(0, meter), withUnit(0, meter)),
+    penetration: withUnit(0, meter),
+    normalizedTime: withUnit(0),
+};
+function processCollision() {
+    var e_2, _a, e_3, _b;
+    checkedCollisions.clear();
+    try {
+        // 衝突判定 & 応答
+        var index1 = 0;
+        var collidersCount = colliders.size;
+        try {
+            for (var colliders_1 = __values(colliders), colliders_1_1 = colliders_1.next(); !colliders_1_1.done; colliders_1_1 = colliders_1.next()) {
+                var collider1 = colliders_1_1.value;
+                var index2 = 0;
+                try {
+                    for (var colliders_2 = (e_3 = void 0, __values(colliders)), colliders_2_1 = colliders_2.next(); !colliders_2_1.done; colliders_2_1 = colliders_2.next()) {
+                        var collider2 = colliders_2_1.value;
+                        if (collider1 !== collider2) {
+                            var collisionId = Math.max(index1, index2) * collidersCount +
+                                Math.min(index1, index2);
+                            if (!checkedCollisions.has(collisionId)) {
+                                checkedCollisions.add(collisionId);
+                                contact.isIntersecting = false;
+                                contactColliderVsCollider(collider1, collider2, contact);
+                                collisionResponse(collider1, contact, collider2);
+                            }
+                        }
+                        index2++;
+                    }
+                }
+                catch (e_3_1) { e_3 = { error: e_3_1 }; }
+                finally {
+                    try {
+                        if (colliders_2_1 && !colliders_2_1.done && (_b = colliders_2.return)) _b.call(colliders_2);
+                    }
+                    finally { if (e_3) throw e_3.error; }
+                }
+                index1++;
+            }
+        }
+        catch (e_2_1) { e_2 = { error: e_2_1 }; }
+        finally {
+            try {
+                if (colliders_1_1 && !colliders_1_1.done && (_a = colliders_1.return)) _a.call(colliders_1);
+            }
+            finally { if (e_2) throw e_2.error; }
+        }
+    }
+    finally {
+        checkedCollisions.clear();
+    }
+}
+function createPhysicalAnimator(element, _a) {
+    var _b = _a === void 0 ? {} : _a, _c = _b.draggingClassName, draggingClassName = _c === void 0 ? "dragging" : _c, _d = _b.chasingClassName, chasingClassName = _d === void 0 ? "chasing" : _d, _e = _b.initialChasingTargetElement, initialChasingTargetElement = _e === void 0 ? undefined : _e;
+    var draggingInfo = null;
+    addDragEventHandler(element, {
+        onDragMove: function (e) {
+            var info = getSinglePointerEvent(e);
+            if (draggingInfo) {
+                draggingInfo.position = vector2(units_mul(info.clientX, meterParPx), units_mul(info.clientY, meterParPx));
+            }
+        },
+        onDragStart: function (e) {
+            var _a;
+            element.classList.add(draggingClassName);
+            var info = getSinglePointerEvent(e);
+            // マウスの位置
+            var position = vector2(units_mul(info.clientX, meterParPx), units_mul(info.clientY, meterParPx));
+            // どこをつかんでいるか求める
+            var elementPosition = boundToShape((_a = getBoundingClientRect(element)) !== null && _a !== void 0 ? _a : unreachable(), meterParPx).center;
+            var offset = subV2(position, elementPosition);
+            draggingInfo = {
+                offset: offset,
+                position: position,
+            };
+        },
+        onDragEnd: function () {
+            element.classList.remove(draggingClassName);
+            draggingInfo = null;
+        },
+    });
+    var acceleration = id;
+    // 親ボタンを追いかけるときの加速度
+    var targetAcceleration = withUnit(30, acceleration);
+    // マウスを追いかけるときの加速度
+    var draggingAcceleration = withUnit(500, acceleration);
+    function createVelocity() {
+        var v = 100;
+        return vector2(withUnit((Math.random() - 0.5) * v, meterParSeconds), withUnit((Math.random() - 0.5) * v, meterParSeconds));
+    }
+    // 表示されていないので初期位置が不明
+    var collider = null;
+    function addChaseVelocity(collider, context, selfPosition, targetPosition, acceleration) {
+        if (acceleration === void 0) { acceleration = targetAcceleration; }
+        // 対象への方向を計算
+        var direction = normalizeV2(subV2(targetPosition, selfPosition));
+        // 対象の方向へ加速
+        addV2(collider.velocity, mulV2(units_mul(context.frameTimeSpan, acceleration), direction), collider.velocity);
+    }
+    var renderer = {
+        stop: function () {
+            if (collider) {
+                removeCollider(collider);
+                collider = null;
+            }
+            removeRenderer(selfAnimator);
+        },
+        start: function () {
+            addRenderer(selfAnimator);
+        },
+        chasingTargetElement: initialChasingTargetElement,
+    };
+    var previousChasing = false;
+    var selfAnimator = function (context) {
+        var _a, _b;
+        // 自分と対象の形を決定
+        var selfRect = getBoundingClientRect(element);
+        var targetRect = renderer.chasingTargetElement
+            ? getBoundingClientRect(renderer.chasingTargetElement)
+            : undefined;
+        var self = selfRect ? boundToShape(selfRect, meterParPx) : undefined;
+        if (self && collider) {
+            self.center[0] = collider.center[0];
+            self.center[1] = collider.center[1];
+        }
+        var target = targetRect
+            ? (function () {
+                var r = boundToShape(targetRect, meterParPx);
+                return __assign(__assign({}, r), { radius: units_mul(r.radius, withUnit(2)) });
+            })()
+            : undefined;
+        // 初期位置の決定
+        if (target && collider === null) {
+            collider = {
+                colliderKind: 0 /* Circle */,
+                center: target.center,
+                velocity: createVelocity(),
+                radius: (_a = self === null || self === void 0 ? void 0 : self.radius) !== null && _a !== void 0 ? _a : withUnit(0, meter),
+                friction: withUnit(0.95),
+                mass: withUnit(1, kilogram),
+            };
+            addCollider(collider);
+        }
+        // 初期位置が決定していないならなにもしない
+        if (collider === null) {
+            return;
+        }
+        // 表示されていないなら半径は 0 にする
+        collider.radius = (_b = self === null || self === void 0 ? void 0 : self.radius) !== null && _b !== void 0 ? _b : withUnit(0, meter);
+        // 双方が表示されていてドラッグされていないとき接触していないなら対象を追いかける
+        if (self && target && !draggingInfo && !isCollision(target, self)) {
+            if (!previousChasing) {
+                element.classList.add(chasingClassName);
+                previousChasing = true;
+            }
+            addChaseVelocity(collider, context, self.center, target.center, targetAcceleration);
+        }
+        else {
+            if (previousChasing) {
+                element.classList.remove(chasingClassName);
+                previousChasing = false;
+            }
+        }
+        // ドラッグされているなら、マウスポインタを追いかける
+        if (self && draggingInfo) {
+            // つかんだ位置を追いかける
+            var targetPosition = subV2(draggingInfo.position, draggingInfo.offset);
+            addChaseVelocity(collider, context, self.center, targetPosition, draggingAcceleration);
+        }
+        // スタイルを設定
+        if (selfRect) {
+            var leftTop = subV2(collider.center, mulV2(vector2(selfRect.width, selfRect.height), units_mul(meterParPx, withUnit(0.5))));
+            element.style.left = toCssPosition(leftTop[0]);
+            element.style.top = toCssPosition(leftTop[1]);
+        }
+    };
+    return renderer;
+}
+function collisionResponse(collider1, contact, collider2) {
+    if (!contact.isIntersecting) {
+        return;
+    }
+    var velocity1 = collider1.velocity;
+    var velocity2 = collider2.velocity;
+    var normal = contact.normal;
+    var p = div(units_mul(withUnit(2), sub(sub(units_add(units_mul(velocity1[0], normal[0]), units_mul(velocity1[1], normal[1])), units_mul(velocity2[0], normal[0])), units_mul(velocity2[1], normal[1]))), units_add(collider1.mass, collider2.mass));
+    subV2(collider1.velocity, mulV2(units_mul(p, collider1.mass), normal), collider1.velocity);
+    addV2(collider2.velocity, mulV2(units_mul(p, collider2.mass), normal), collider2.velocity);
+}
+function contactColliderVsCollider(collider1, collider2, result) {
+    switch (collider1.colliderKind) {
+        case 0 /* Circle */:
+            switch (collider2.colliderKind) {
+                case 0 /* Circle */:
+                    return contactCircleVsCircle(collider1, collider2, result);
+                case 1 /* Box */:
+                    return contactCircleVsBox(collider1, collider2, result);
+                default:
+                    return exhaustive(collider2);
+            }
+        case 1 /* Box */:
+            switch (collider2.colliderKind) {
+                case 0 /* Circle */:
+                    return contactCircleVsBox(collider2, collider1, result);
+                case 1 /* Box */:
+                    return contactBoxVsBox(collider1, collider2, result);
+                default:
+                    return exhaustive(collider2);
+            }
+        default:
+            return exhaustive(collider1);
+    }
+}
+function contactCircleVsBox(collider1, collider2, result) {
+    // TODO:
+    throw new Error("TODO");
+}
+function contactBoxVsBox(collider1, collider2, result) {
+    // TODO:
+    throw new Error("TODO");
+}
+function contactCircleVsCircle(collider1, collider2, result) {
+    var center1 = collider1.center;
+    var center2 = collider2.center;
+    var radius1 = collider1.radius;
+    var radius2 = collider2.radius;
+    var distance = subV2(center1, center2);
+    var distanceLength = lengthV2(distance);
+    if (distanceLength < units_add(radius1, radius2)) {
+        result.isIntersecting = true;
+        var penetration = sub(units_add(radius1, radius2), distanceLength);
+        result.penetration = penetration;
+        divV2(distance, distanceLength, result.normal);
+        result.normalizedTime = withUnit(1);
+    }
+    else {
+        result.isIntersecting = false;
+    }
+}
+function updatePosition(context) {
+    var e_4, _a;
+    try {
+        for (var colliders_3 = __values(colliders), colliders_3_1 = colliders_3.next(); !colliders_3_1.done; colliders_3_1 = colliders_3.next()) {
+            var _b = colliders_3_1.value, velocity = _b.velocity, center = _b.center, friction = _b.friction;
+            // 空気抵抗
+            mulV2(velocity, friction, velocity);
+            if (isNaN(withoutUnit(velocity[0]))) {
+                velocity[0] = withUnit(0, meterParSeconds);
+            }
+            if (isNaN(withoutUnit(velocity[1]))) {
+                velocity[1] = withUnit(0, meterParSeconds);
+            }
+            // 移動
+            addV2(center, mulV2(context.frameTimeSpan, velocity), center);
+        }
+    }
+    catch (e_4_1) { e_4 = { error: e_4_1 }; }
+    finally {
+        try {
+            if (colliders_3_1 && !colliders_3_1.done && (_a = colliders_3.return)) _a.call(colliders_3);
+        }
+        finally { if (e_4) throw e_4.error; }
+    }
+}
+function fontSizeAtElement(element) {
+    var _a;
+    return withUnit(Number((_a = getComputedStyle(element).fontSize.match(/(\d+)px/)) === null || _a === void 0 ? void 0 : _a[1]), px);
+}
+function toCssPosition(x) {
+    return Math.round(withoutUnit(div(x, meterParPx))) + "px";
+}
+/** `m/px` */
+var meterParPx = (function () {
+    var x = document.createElement("div");
+    try {
+        x.style.fontSize = "1em";
+        x.appendChild(document.createTextNode("x"));
+        document.body.appendChild(x);
+        return div(withUnit(1, meter), fontSizeAtElement(x));
+    }
+    finally {
+        x.remove();
+    }
+})();
+
+;// CONCATENATED MODULE: ./source/pokemapi-friend-qr.ts
+var __makeTemplateObject = (undefined && undefined.__makeTemplateObject) || function (cooked, raw) {
+    if (Object.defineProperty) { Object.defineProperty(cooked, "raw", { value: raw }); } else { cooked.raw = raw; }
+    return cooked;
 };
 var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -3266,7 +3759,7 @@ var __spreadArray = (undefined && undefined.__spreadArray) || function (to, from
     }
     return to.concat(ar || Array.prototype.slice.call(from));
 };
-var __values = (undefined && undefined.__values) || function(o) {
+var pokemapi_friend_qr_values = (undefined && undefined.__values) || function(o) {
     var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
     if (m) return m.call(o);
     if (o && typeof o.length === "number") return {
@@ -3279,12 +3772,6 @@ var __values = (undefined && undefined.__values) || function(o) {
 };
 
 
-
-var px = id;
-var meterParSeconds = id;
-function unreachable() {
-    throw new Error("unreachable");
-}
 function handleAsyncError(promise) {
     promise.catch(function (error) { return console.error(error); });
 }
@@ -3336,101 +3823,6 @@ function createQRCodeImage(code) {
         });
     });
 }
-var lastFrameCancellationHandle = null;
-var renderers = [];
-var context = { frameTimeSpan: withUnit(0.1, seconds) };
-var lastTime = 0;
-function frameMainLoop(time) {
-    var e_1, _a;
-    // 前のフレームからの経過時間を測定
-    context.frameTimeSpan = withUnit(lastTime === 0 ? 1 / 60 : (lastTime - time) * 0.001, seconds);
-    lastTime = time;
-    try {
-        for (var renderers_1 = __values(renderers), renderers_1_1 = renderers_1.next(); !renderers_1_1.done; renderers_1_1 = renderers_1.next()) {
-            var render = renderers_1_1.value;
-            render(context);
-        }
-    }
-    catch (e_1_1) { e_1 = { error: e_1_1 }; }
-    finally {
-        try {
-            if (renderers_1_1 && !renderers_1_1.done && (_a = renderers_1.return)) _a.call(renderers_1);
-        }
-        finally { if (e_1) throw e_1.error; }
-    }
-    lastFrameCancellationHandle =
-        globalThis.requestAnimationFrame(frameMainLoop);
-}
-function addRenderer(render) {
-    if (renderers.length === 0) {
-        globalThis.requestAnimationFrame(frameMainLoop);
-        console.debug("アニメーションループ開始");
-    }
-    renderers.push(render);
-}
-function removeRenderer(render) {
-    renderers.splice(renderers.indexOf(render), 1);
-    if (renderers.length === 0) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        globalThis.cancelAnimationFrame(lastFrameCancellationHandle);
-        console.debug("アニメーションループ停止");
-        lastFrameCancellationHandle = null;
-    }
-}
-function fontSizeAtElement(element) {
-    var _a;
-    return withUnit(Number((_a = getComputedStyle(element).fontSize.match(/(\d+)px/)) === null || _a === void 0 ? void 0 : _a[1]), px);
-}
-function getBoundingClientRect(element) {
-    if (element.parentElement === null) {
-        return;
-    }
-    var style = getComputedStyle(element);
-    if (style.visibility === "hidden") {
-        return;
-    }
-    return element.getBoundingClientRect();
-}
-function isCollision(c1, c2) {
-    return lt(distance(c1.center, c2.center), add(c1.radius, c2.radius));
-}
-function boundToShape(rect, meterParPx) {
-    return {
-        center: vector2(mul(mul(add(rect.right, rect.left), withUnit(0.5)), meterParPx), mul(mul(add(rect.bottom, rect.top), withUnit(0.5)), meterParPx)),
-        radius: mul(max(rect.width, rect.height), mul(withUnit(0.5), meterParPx)),
-    };
-}
-function addDragEventHandler(element, options) {
-    if (options === void 0) { options = {}; }
-    var onDragMove = options.onDragMove, onDragStart = options.onDragStart, onDragEnd = options.onDragEnd;
-    element.addEventListener("mousedown", onDown, false);
-    element.addEventListener("touchstart", onDown, false);
-    function onDown(e) {
-        onDragStart === null || onDragStart === void 0 ? void 0 : onDragStart(e);
-        document.body.addEventListener("mousemove", onMove, false);
-        document.body.addEventListener("touchmove", onMove, false);
-    }
-    function onMove(e) {
-        onDragMove === null || onDragMove === void 0 ? void 0 : onDragMove(e);
-        e.preventDefault();
-        document.body.addEventListener("mouseup", onRelease, false);
-        document.body.addEventListener("touchend", onRelease, false);
-        document.body.addEventListener("touchcancel", onRelease, false);
-    }
-    function onRelease(e) {
-        onDragEnd === null || onDragEnd === void 0 ? void 0 : onDragEnd(e);
-        document.body.removeEventListener("mousemove", onMove, false);
-        document.body.removeEventListener("touchmove", onMove, false);
-        document.body.removeEventListener("mouseup", onRelease, false);
-        document.body.removeEventListener("touchend", onRelease, false);
-        document.body.removeEventListener("touchcancel", onRelease, false);
-    }
-}
-function getSinglePointerEvent(e) {
-    var _a;
-    var r = e instanceof TouchEvent ? (_a = e.changedTouches[0]) !== null && _a !== void 0 ? _a : unreachable() : e;
-    return r;
-}
 function asyncMain() {
     return __awaiter(this, void 0, void 0, function () {
         function toastAsync(message, _a) {
@@ -3461,24 +3853,10 @@ function asyncMain() {
             }
             handleAsyncError(toastAsync.apply(void 0, __spreadArray([], __read(args), false)));
         }
-        function toCssPosition(x) {
-            return Math.round(withoutUnit(div(x, meterParPx))) + "px";
-        }
         function createQRButton(code) {
             var _a;
             return __awaiter(this, void 0, void 0, function () {
-                function createVelocity() {
-                    var v = 100;
-                    return vector2(withUnit((Math.random() - 0.5) * v, meterParSeconds), withUnit((Math.random() - 0.5) * v, meterParSeconds));
-                }
-                function addChaseVelocity(context, selfPosition, targetPosition, acceleration) {
-                    if (acceleration === void 0) { acceleration = targetAcceleration; }
-                    // 対象への方向を計算
-                    var direction = normalizeV2(subV2(targetPosition, selfPosition));
-                    // 対象の方向へ加速
-                    velocity = addV2(velocity, mulV2(mul(context.frameTimeSpan, acceleration), direction));
-                }
-                var qrButton, checkboxId, qrImageContainer, qrImage, draggingInfo, acceleration, targetAcceleration, draggingAcceleration, position, velocity, previousChasing, selfAnimator;
+                var qrButton, checkboxId, qrImageContainer, qrImage, animator;
                 return __generator(this, function (_b) {
                     switch (_b.label) {
                         case 0:
@@ -3491,102 +3869,11 @@ function asyncMain() {
                         case 1:
                             qrImage = _b.sent();
                             qrImageContainer.appendChild(qrImage);
-                            draggingInfo = null;
-                            addDragEventHandler(qrImageContainer, {
-                                onDragMove: function (e) {
-                                    var info = getSinglePointerEvent(e);
-                                    if (draggingInfo) {
-                                        draggingInfo.position = vector2(mul(info.clientX, meterParPx), mul(info.clientY, meterParPx));
-                                    }
-                                },
-                                onDragStart: function (e) {
-                                    var _a;
-                                    qrImageContainer.classList.add(qrDraggingName);
-                                    var info = getSinglePointerEvent(e);
-                                    // マウスの位置
-                                    var position = vector2(mul(info.clientX, meterParPx), mul(info.clientY, meterParPx));
-                                    // どこをつかんでいるか求める
-                                    var elementPosition = boundToShape((_a = getBoundingClientRect(qrImageContainer)) !== null && _a !== void 0 ? _a : unreachable(), meterParPx).center;
-                                    var offset = subV2(position, elementPosition);
-                                    draggingInfo = {
-                                        offset: offset,
-                                        position: position,
-                                    };
-                                },
-                                onDragEnd: function () {
-                                    qrImageContainer.classList.remove(qrDraggingName);
-                                    draggingInfo = null;
-                                },
+                            animator = createPhysicalAnimator(qrImageContainer, {
+                                draggingClassName: qrDraggingName,
+                                chasingClassName: qrChasingName,
+                                initialChasingTargetElement: qrButton,
                             });
-                            acceleration = id;
-                            targetAcceleration = withUnit(30, acceleration);
-                            draggingAcceleration = withUnit(500, acceleration);
-                            position = null;
-                            velocity = createVelocity();
-                            previousChasing = false;
-                            selfAnimator = function (context) {
-                                // 自分と対象の形を決定
-                                var selfRect = getBoundingClientRect(qrImageContainer);
-                                var targetRect = getBoundingClientRect(qrButton);
-                                var self = selfRect
-                                    ? boundToShape(selfRect, meterParPx)
-                                    : undefined;
-                                if (self && position) {
-                                    self.center[0] = position[0];
-                                    self.center[1] = position[1];
-                                }
-                                var target = targetRect
-                                    ? (function () {
-                                        var r = boundToShape(targetRect, meterParPx);
-                                        return __assign(__assign({}, r), { radius: mul(r.radius, withUnit(2)) });
-                                    })()
-                                    : undefined;
-                                // 初期位置の決定
-                                if (target && position === null) {
-                                    position = target.center;
-                                }
-                                // 初期位置が決定していないならなにもしない
-                                if (position === null) {
-                                    return;
-                                }
-                                // 双方が表示されていてドラッグされていないとき接触していないなら対象を追いかける
-                                if (self && target && !draggingInfo && !isCollision(target, self)) {
-                                    if (!previousChasing) {
-                                        qrImageContainer.classList.add(qrChasingName);
-                                        previousChasing = true;
-                                    }
-                                    addChaseVelocity(context, self.center, target.center, targetAcceleration);
-                                }
-                                else {
-                                    if (previousChasing) {
-                                        qrImageContainer.classList.remove(qrChasingName);
-                                        previousChasing = false;
-                                    }
-                                }
-                                // ドラッグされているなら、マウスポインタを追いかける
-                                if (self && draggingInfo) {
-                                    // つかんだ位置を追いかける
-                                    var targetPosition = subV2(draggingInfo.position, draggingInfo.offset);
-                                    addChaseVelocity(context, self.center, targetPosition, draggingAcceleration);
-                                }
-                                // 物理演算
-                                // 空気抵抗
-                                velocity = mulV2(velocity, withUnit(0.95));
-                                if (isNaN(withoutUnit(velocity[0]))) {
-                                    velocity[0] = withUnit(0, meterParSeconds);
-                                }
-                                if (isNaN(withoutUnit(velocity[1]))) {
-                                    velocity[1] = withUnit(0, meterParSeconds);
-                                }
-                                // 移動
-                                position = addV2(position, mulV2(context.frameTimeSpan, velocity));
-                                // スタイルを設定
-                                if (selfRect) {
-                                    var leftTop = subV2(position, mulV2(vector2(selfRect.width, selfRect.height), mul(meterParPx, withUnit(0.5))));
-                                    qrImageContainer.style.left = toCssPosition(leftTop[0]);
-                                    qrImageContainer.style.top = toCssPosition(leftTop[1]);
-                                }
-                            };
                             (_a = qrButton.querySelector("input")) === null || _a === void 0 ? void 0 : _a.addEventListener("click", function () {
                                 var _this = this;
                                 if (this.checked) {
@@ -3598,10 +3885,10 @@ function asyncMain() {
                                             otherCheckbox.checked = false;
                                         }
                                     });
-                                    addRenderer(selfAnimator);
+                                    animator.start();
                                 }
                                 else {
-                                    removeRenderer(selfAnimator);
+                                    animator.stop();
                                 }
                             });
                             return [2 /*return*/, qrButton];
@@ -3612,13 +3899,13 @@ function asyncMain() {
         function appendTrainerCodeUI() {
             var _a;
             return __awaiter(this, void 0, void 0, function () {
-                var _b, _c, commentElement, parentElement, comment, codes, code, idContainerElement, _d, _e, e_2_1;
-                var e_2, _f;
+                var _b, _c, commentElement, parentElement, comment, codes, code, idContainerElement, _d, _e, e_1_1;
+                var e_1, _f;
                 return __generator(this, function (_g) {
                     switch (_g.label) {
                         case 0:
                             _g.trys.push([0, 5, 6, 7]);
-                            _b = __values(Array.from(document.querySelectorAll(".trainer_code"))), _c = _b.next();
+                            _b = pokemapi_friend_qr_values(Array.from(document.querySelectorAll(".trainer_code"))), _c = _b.next();
                             _g.label = 1;
                         case 1:
                             if (!!_c.done) return [3 /*break*/, 4];
@@ -3651,21 +3938,21 @@ function asyncMain() {
                             return [3 /*break*/, 1];
                         case 4: return [3 /*break*/, 7];
                         case 5:
-                            e_2_1 = _g.sent();
-                            e_2 = { error: e_2_1 };
+                            e_1_1 = _g.sent();
+                            e_1 = { error: e_1_1 };
                             return [3 /*break*/, 7];
                         case 6:
                             try {
                                 if (_c && !_c.done && (_f = _b.return)) _f.call(_b);
                             }
-                            finally { if (e_2) throw e_2.error; }
+                            finally { if (e_1) throw e_1.error; }
                             return [7 /*endfinally*/];
                         case 7: return [2 /*return*/];
                     }
                 });
             });
         }
-        var idContainerName, qrNumberName, qrContainerName, qrCheckboxName, qrLabelName, qrImageContainerName, qrChasingName, qrDraggingName, toastListName, toastItemName, toastListElement, nextCheckboxId, meterParPx;
+        var idContainerName, qrNumberName, qrContainerName, qrCheckboxName, qrLabelName, qrImageContainerName, qrChasingName, qrDraggingName, toastListName, toastItemName, toastListElement, nextCheckboxId;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, waitElementLoaded()];
@@ -3679,7 +3966,7 @@ function asyncMain() {
                     qrImageContainerName = "qr-image-container";
                     qrChasingName = "qr-chasing";
                     qrDraggingName = "qr-dragging";
-                    addStyle(templateObject_1 || (templateObject_1 = __makeTemplateObject(["\n        .", " {\n            float: right;\n            display: flex;\n            padding: 0;\n            margin: 0 0.5em;\n            border: 2px solid #ddd;\n        }\n        .", " {\n            padding: 0 0.5em;\n            border-right: 2px dashed #ddd;\n        }\n        .", " {\n            position: fixed;\n            top: 50%;\n            left: 50%;\n            z-index: 9999;\n            cursor: grab;\n\n            border-radius: 50%;\n            background: rgb(255 255 255 / 20%);\n            padding: 1.5em;\n            box-shadow: 0 0.2em 1em 0.5em rgb(0 0 0 / 10%);\n            border: solid 1px #ccc;\n            backdrop-filter: blur(0.3em);\n\n            transition: background 1s, box-shadow 1s, border 1s;\n\n            width: 0;\n            height: 0;\n            visibility: hidden;\n        }\n        .", ":hover {\n            background: rgb(192 164 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(250 220 255 / 30%);\n            border: solid 1px #cab8cb;\n        }\n        .", ".", " {\n            background: rgb(131 179 193 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(171 236 255 / 30%);\n            border: solid 1px #afc6c7;\n        }\n        .", ".", " {\n            background: rgb(187 134 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(243 177 255 / 30%);\n            border: solid 1px #c9a6cb;\n        }\n        .", ":checked + .", " + .", " {\n            width: 4em;\n            height: 4em;\n            visibility: visible;\n        }\n        .", " {\n            display: none;\n        }\n        "], ["\n        .", " {\n            float: right;\n            display: flex;\n            padding: 0;\n            margin: 0 0.5em;\n            border: 2px solid #ddd;\n        }\n        .", " {\n            padding: 0 0.5em;\n            border-right: 2px dashed #ddd;\n        }\n        .", " {\n            position: fixed;\n            top: 50%;\n            left: 50%;\n            z-index: 9999;\n            cursor: grab;\n\n            border-radius: 50%;\n            background: rgb(255 255 255 / 20%);\n            padding: 1.5em;\n            box-shadow: 0 0.2em 1em 0.5em rgb(0 0 0 / 10%);\n            border: solid 1px #ccc;\n            backdrop-filter: blur(0.3em);\n\n            transition: background 1s, box-shadow 1s, border 1s;\n\n            width: 0;\n            height: 0;\n            visibility: hidden;\n        }\n        .", ":hover {\n            background: rgb(192 164 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(250 220 255 / 30%);\n            border: solid 1px #cab8cb;\n        }\n        .", ".", " {\n            background: rgb(131 179 193 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(171 236 255 / 30%);\n            border: solid 1px #afc6c7;\n        }\n        .", ".", " {\n            background: rgb(187 134 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(243 177 255 / 30%);\n            border: solid 1px #c9a6cb;\n        }\n        .", ":checked + .", " + .", " {\n            width: 4em;\n            height: 4em;\n            visibility: visible;\n        }\n        .", " {\n            display: none;\n        }\n        "])), idContainerName, qrNumberName, qrImageContainerName, qrImageContainerName, qrImageContainerName, qrChasingName, qrImageContainerName, qrDraggingName, qrCheckboxName, qrLabelName, qrImageContainerName, qrCheckboxName);
+                    addStyle(templateObject_1 || (templateObject_1 = __makeTemplateObject(["\n        .", " {\n            float: right;\n            display: flex;\n            padding: 0;\n            margin: 0 0.5em;\n            border: 2px solid #ddd;\n        }\n        .", " {\n            padding: 0 0.5em;\n            border-right: 2px dashed #ddd;\n        }\n        .", " {\n            position: fixed;\n            top: 50%;\n            left: 50%;\n            z-index: 9999;\n            cursor: grab;\n\n            border-radius: 50%;\n            background: rgb(255 255 255 / 20%);\n            padding: 1.5em;\n            box-shadow: 0 0.2em 1em 0.5em rgb(0 0 0 / 10%);\n            border: solid 1px #ccc;\n            backdrop-filter: blur(0.3em);\n\n            transition:\n                background 1s,\n                box-shadow 1s,\n                border 1s,\n                transform 0.2s ease-out,\n                opacity 0.2s ease-out;\n\n            width: 4em;\n            height: 4em;\n            transform: scale(0.1);\n            opacity: 0;\n        }\n        .", ":hover {\n            background: rgb(192 164 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(250 220 255 / 30%);\n            border: solid 1px #cab8cb;\n        }\n        .", ".", " {\n            background: rgb(131 179 193 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(171 236 255 / 30%);\n            border: solid 1px #afc6c7;\n        }\n        .", ".", " {\n            background: rgb(187 134 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(243 177 255 / 30%);\n            border: solid 1px #c9a6cb;\n        }\n        .", ":checked + .", " + .", " {\n            transform: scale(1);\n            opacity: 1;\n        }\n        .", " {\n            display: none;\n        }\n        "], ["\n        .", " {\n            float: right;\n            display: flex;\n            padding: 0;\n            margin: 0 0.5em;\n            border: 2px solid #ddd;\n        }\n        .", " {\n            padding: 0 0.5em;\n            border-right: 2px dashed #ddd;\n        }\n        .", " {\n            position: fixed;\n            top: 50%;\n            left: 50%;\n            z-index: 9999;\n            cursor: grab;\n\n            border-radius: 50%;\n            background: rgb(255 255 255 / 20%);\n            padding: 1.5em;\n            box-shadow: 0 0.2em 1em 0.5em rgb(0 0 0 / 10%);\n            border: solid 1px #ccc;\n            backdrop-filter: blur(0.3em);\n\n            transition:\n                background 1s,\n                box-shadow 1s,\n                border 1s,\n                transform 0.2s ease-out,\n                opacity 0.2s ease-out;\n\n            width: 4em;\n            height: 4em;\n            transform: scale(0.1);\n            opacity: 0;\n        }\n        .", ":hover {\n            background: rgb(192 164 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(250 220 255 / 30%);\n            border: solid 1px #cab8cb;\n        }\n        .", ".", " {\n            background: rgb(131 179 193 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(171 236 255 / 30%);\n            border: solid 1px #afc6c7;\n        }\n        .", ".", " {\n            background: rgb(187 134 197 / 20%);\n            box-shadow: 0 0.2em 1em 0.5em rgb(243 177 255 / 30%);\n            border: solid 1px #c9a6cb;\n        }\n        .", ":checked + .", " + .", " {\n            transform: scale(1);\n            opacity: 1;\n        }\n        .", " {\n            display: none;\n        }\n        "])), idContainerName, qrNumberName, qrImageContainerName, qrImageContainerName, qrImageContainerName, qrChasingName, qrImageContainerName, qrDraggingName, qrCheckboxName, qrLabelName, qrImageContainerName, qrCheckboxName);
                     toastListName = "qr-toast-list";
                     toastItemName = "qr-toast-item";
                     addStyle(templateObject_2 || (templateObject_2 = __makeTemplateObject(["\n        .", " {\n            position: fixed;\n            right: 0;\n            bottom: 0;\n            z-index: 9999;\n            list-style: none;\n            padding: 0;\n            margin: 0;\n        }\n        .", ":first-of-type {\n            border-top: 1px solid #ddd;\n        }\n        .", " {\n            background-color: white;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            border-top: 1px dashed #ccc;\n            margin: 0 0.5em;\n            padding: 1em;\n            box-shadow: 0 2px 2px rgb(0 0 0 / 50%);\n        }\n    "], ["\n        .", " {\n            position: fixed;\n            right: 0;\n            bottom: 0;\n            z-index: 9999;\n            list-style: none;\n            padding: 0;\n            margin: 0;\n        }\n        .", ":first-of-type {\n            border-top: 1px solid #ddd;\n        }\n        .", " {\n            background-color: white;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            border-top: 1px dashed #ccc;\n            margin: 0 0.5em;\n            padding: 1em;\n            box-shadow: 0 2px 2px rgb(0 0 0 / 50%);\n        }\n    "])), toastListName, toastItemName, toastItemName);
@@ -3687,18 +3974,6 @@ function asyncMain() {
                     toastListElement.classList.add(toastListName);
                     document.body.appendChild(toastListElement);
                     nextCheckboxId = 0;
-                    meterParPx = (function () {
-                        var x = document.createElement("div");
-                        try {
-                            x.style.fontSize = "1em";
-                            x.appendChild(document.createTextNode("x"));
-                            document.body.appendChild(x);
-                            return div(withUnit(1, meter), fontSizeAtElement(x));
-                        }
-                        finally {
-                            x.remove();
-                        }
-                    })();
                     return [4 /*yield*/, appendTrainerCodeUI()];
                 case 2:
                     _a.sent();

@@ -90,11 +90,17 @@ async function asyncMain() {
             border: solid 1px #ccc;
             backdrop-filter: blur(0.3em);
 
-            transition: background 1s, box-shadow 1s, border 1s;
+            transition:
+                background 1s,
+                box-shadow 1s,
+                border 1s,
+                transform 0.2s ease-out,
+                opacity 0.2s ease-out;
 
-            width: 0;
-            height: 0;
-            visibility: hidden;
+            width: 4em;
+            height: 4em;
+            transform: scale(0.1);
+            opacity: 0;
         }
         .${qrImageContainerName}:hover {
             background: rgb(192 164 197 / 20%);
@@ -112,9 +118,8 @@ async function asyncMain() {
             border: solid 1px #c9a6cb;
         }
         .${qrCheckboxName}:checked + .${qrLabelName} + .${qrImageContainerName} {
-            width: 4em;
-            height: 4em;
-            visibility: visible;
+            transform: scale(1);
+            opacity: 1;
         }
         .${qrCheckboxName} {
             display: none;
