@@ -1,31 +1,5 @@
 import qrCode from "qrcode";
-import {
-    numberWith,
-    seconds,
-    Unit,
-    withUnit as unit,
-    id,
-    Id,
-    mul,
-    meter,
-    div,
-    add,
-    UnitKind,
-    MulU,
-    DivU,
-    max,
-    lt,
-    withoutUnit,
-} from "./units";
-import { addV2, distance, mulV2, normalizeV2, subV2, vector2 } from "./vector2";
-
-type px = Unit<"px">;
-const px: Id<px> = id;
-const meterParSeconds: Id<DivU<meter, seconds>> = id;
-
-function unreachable(): never {
-    throw new Error("unreachable");
-}
+import { createPhysicalAnimator } from "./physical-element-animator";
 
 function handleAsyncError(promise: Promise<void>) {
     promise.catch((error) => console.error(error));
@@ -78,141 +52,6 @@ async function createQRCodeImage(code: string) {
         "image/svg+xml"
     ) as XMLDocument;
     return document.firstChild as SVGSVGElement;
-}
-
-type RenderContext = {
-    frameTimeSpan: numberWith<seconds>;
-};
-type Renderer = (context: Readonly<RenderContext>) => void;
-let lastFrameCancellationHandle: number | null = null;
-const renderers: Renderer[] = [];
-const context: RenderContext = { frameTimeSpan: unit(0.1, seconds) };
-let lastTime = 0;
-function frameMainLoop(time: DOMHighResTimeStamp) {
-    // 前のフレームからの経過時間を測定
-    context.frameTimeSpan = unit(
-        lastTime === 0 ? 1 / 60 : (lastTime - time) * 0.001,
-        seconds
-    );
-    lastTime = time;
-    for (const render of renderers) {
-        render(context);
-    }
-    lastFrameCancellationHandle =
-        globalThis.requestAnimationFrame(frameMainLoop);
-}
-
-function addRenderer(render: Renderer) {
-    if (renderers.length === 0) {
-        globalThis.requestAnimationFrame(frameMainLoop);
-        console.debug("アニメーションループ開始");
-    }
-    renderers.push(render);
-}
-function removeRenderer(render: Renderer) {
-    renderers.splice(renderers.indexOf(render), 1);
-    if (renderers.length === 0) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        globalThis.cancelAnimationFrame(lastFrameCancellationHandle!);
-        console.debug("アニメーションループ停止");
-        lastFrameCancellationHandle = null;
-    }
-}
-function fontSizeAtElement(element: Element) {
-    return unit(
-        Number(getComputedStyle(element).fontSize.match(/(\d+)px/)?.[1]),
-        px
-    );
-}
-type DOMRectWithUnit = {
-    [k in keyof DOMRect]: DOMRect[k] extends number
-        ? numberWith<px>
-        : DOMRect[k];
-};
-function getBoundingClientRect(element: Element) {
-    if (element.parentElement === null) {
-        return;
-    }
-    const style = getComputedStyle(element);
-    if (style.visibility === "hidden") {
-        return;
-    }
-    return element.getBoundingClientRect() as unknown as DOMRectWithUnit;
-}
-
-interface Circle<u extends UnitKind> {
-    readonly center: vector2<u>;
-    readonly radius: numberWith<u>;
-}
-
-function isCollision<u extends UnitKind>(c1: Circle<u>, c2: Circle<u>) {
-    return lt(distance(c1.center, c2.center), add(c1.radius, c2.radius));
-}
-function boundToShape(
-    rect: DOMRectWithUnit,
-    meterParPx: numberWith<DivU<meter, px>>
-): Circle<meter> {
-    return {
-        center: vector2(
-            mul(mul(add(rect.right, rect.left), unit(0.5)), meterParPx),
-            mul(mul(add(rect.bottom, rect.top), unit(0.5)), meterParPx)
-        ),
-        radius: mul(max(rect.width, rect.height), mul(unit(0.5), meterParPx)),
-    };
-}
-
-type MainPointerEvent = TouchEvent | MouseEvent;
-function addDragEventHandler(
-    element: HTMLElement,
-    options: {
-        onDragMove?(e: MainPointerEvent): void;
-        onDragStart?(e: MainPointerEvent): void;
-        onDragEnd?(e: MainPointerEvent): void;
-    } = {}
-) {
-    const { onDragMove, onDragStart, onDragEnd } = options;
-
-    element.addEventListener("mousedown", onDown, false);
-    element.addEventListener("touchstart", onDown, false);
-
-    function onDown(e: MainPointerEvent) {
-        onDragStart?.(e);
-        document.body.addEventListener("mousemove", onMove, false);
-        document.body.addEventListener("touchmove", onMove, false);
-    }
-    function onMove(e: MainPointerEvent) {
-        onDragMove?.(e);
-        e.preventDefault();
-
-        document.body.addEventListener("mouseup", onRelease, false);
-        document.body.addEventListener("touchend", onRelease, false);
-        document.body.addEventListener("touchcancel", onRelease, false);
-    }
-    function onRelease(e: MainPointerEvent) {
-        onDragEnd?.(e);
-
-        document.body.removeEventListener("mousemove", onMove, false);
-        document.body.removeEventListener("touchmove", onMove, false);
-
-        document.body.removeEventListener("mouseup", onRelease, false);
-        document.body.removeEventListener("touchend", onRelease, false);
-        document.body.removeEventListener("touchcancel", onRelease, false);
-    }
-}
-
-type SinglePointerEvent = MouseEvent | Touch;
-type SinglePointerEventWithUnit = {
-    [k in keyof SinglePointerEvent]: [SinglePointerEvent[k], k] extends [
-        number,
-        `x` | `y` | `${string}${`X` | `Y`}`
-    ]
-        ? numberWith<px>
-        : SinglePointerEvent[k];
-};
-function getSinglePointerEvent(e: MainPointerEvent) {
-    const r: SinglePointerEvent =
-        e instanceof TouchEvent ? e.changedTouches[0] ?? unreachable() : e;
-    return r as unknown as SinglePointerEventWithUnit;
 }
 async function asyncMain() {
     await waitElementLoaded();
@@ -323,22 +162,6 @@ async function asyncMain() {
     }
 
     let nextCheckboxId = 0;
-
-    /** `m/px` */
-    const meterParPx = (() => {
-        const x = document.createElement("div");
-        try {
-            x.style.fontSize = "1em";
-            x.appendChild(document.createTextNode("x"));
-            document.body.appendChild(x);
-            return div(unit(1, meter), fontSizeAtElement(x));
-        } finally {
-            x.remove();
-        }
-    })();
-    function toCssPosition(x: numberWith<meter>) {
-        return Math.round(withoutUnit<px>(div(x, meterParPx))) + "px";
-    }
     async function createQRButton(code: string) {
         const qrButton = document.createElement("span");
         qrButton.classList.add(qrContainerName);
@@ -357,169 +180,11 @@ async function asyncMain() {
         const qrImage = await createQRCodeImage(code);
         qrImageContainer.appendChild(qrImage);
 
-        interface DraggingInfo {
-            /** ドラッグ対象の要素の中心座標とマウスが押された座標の差 */
-            readonly offset: vector2<meter>;
-            /** 現在のマウスの位置 */
-            position: vector2<meter>;
-        }
-        let draggingInfo: DraggingInfo | null = null;
-        addDragEventHandler(qrImageContainer, {
-            onDragMove(e) {
-                const info = getSinglePointerEvent(e);
-                if (draggingInfo) {
-                    draggingInfo.position = vector2(
-                        mul(info.clientX, meterParPx),
-                        mul(info.clientY, meterParPx)
-                    );
-                }
-            },
-            onDragStart(e) {
-                qrImageContainer.classList.add(qrDraggingName);
-                const info = getSinglePointerEvent(e);
-
-                // マウスの位置
-                const position = vector2(
-                    mul(info.clientX, meterParPx),
-                    mul(info.clientY, meterParPx)
-                );
-
-                // どこをつかんでいるか求める
-                const { center: elementPosition } = boundToShape(
-                    getBoundingClientRect(qrImageContainer) ?? unreachable(),
-                    meterParPx
-                );
-                const offset = subV2(position, elementPosition);
-
-                draggingInfo = {
-                    offset,
-                    position,
-                };
-            },
-            onDragEnd() {
-                qrImageContainer.classList.remove(qrDraggingName);
-                draggingInfo = null;
-            },
+        const animator = createPhysicalAnimator(qrImageContainer, {
+            draggingClassName: qrDraggingName,
+            chasingClassName: qrChasingName,
+            initialChasingTargetElement: qrButton,
         });
-
-        const acceleration: Id<DivU<meter, MulU<seconds, seconds>>> = id;
-        // 親ボタンを追いかけるときの加速度
-        const targetAcceleration = unit(30, acceleration);
-        // マウスを追いかけるときの加速度
-        const draggingAcceleration = unit(500, acceleration);
-        // 表示されていないので初期位置が不明
-        let position: vector2<meter> | null = null;
-        function createVelocity() {
-            const v = 100;
-            return vector2(
-                unit((Math.random() - 0.5) * v, meterParSeconds),
-                unit((Math.random() - 0.5) * v, meterParSeconds)
-            );
-        }
-        let velocity = createVelocity();
-
-        function addChaseVelocity(
-            context: Readonly<RenderContext>,
-            selfPosition: vector2<meter>,
-            targetPosition: vector2<meter>,
-            acceleration = targetAcceleration
-        ) {
-            // 対象への方向を計算
-            const direction = normalizeV2(subV2(targetPosition, selfPosition));
-
-            // 対象の方向へ加速
-            velocity = addV2(
-                velocity,
-                mulV2(mul(context.frameTimeSpan, acceleration), direction)
-            );
-        }
-        let previousChasing = false;
-        const selfAnimator: Renderer = (context) => {
-            // 自分と対象の形を決定
-            const selfRect = getBoundingClientRect(qrImageContainer);
-            const targetRect = getBoundingClientRect(qrButton);
-            const self = selfRect
-                ? boundToShape(selfRect, meterParPx)
-                : undefined;
-            if (self && position) {
-                self.center[0] = position[0];
-                self.center[1] = position[1];
-            }
-            const target = targetRect
-                ? (() => {
-                      const r = boundToShape(targetRect, meterParPx);
-                      return { ...r, radius: mul(r.radius, unit(2)) };
-                  })()
-                : undefined;
-
-            // 初期位置の決定
-            if (target && position === null) {
-                position = target.center;
-            }
-            // 初期位置が決定していないならなにもしない
-            if (position === null) {
-                return;
-            }
-
-            // 双方が表示されていてドラッグされていないとき接触していないなら対象を追いかける
-            if (self && target && !draggingInfo && !isCollision(target, self)) {
-                if (!previousChasing) {
-                    qrImageContainer.classList.add(qrChasingName);
-                    previousChasing = true;
-                }
-                addChaseVelocity(
-                    context,
-                    self.center,
-                    target.center,
-                    targetAcceleration
-                );
-            } else {
-                if (previousChasing) {
-                    qrImageContainer.classList.remove(qrChasingName);
-                    previousChasing = false;
-                }
-            }
-            // ドラッグされているなら、マウスポインタを追いかける
-            if (self && draggingInfo) {
-                // つかんだ位置を追いかける
-                const targetPosition = subV2(
-                    draggingInfo.position,
-                    draggingInfo.offset
-                );
-                addChaseVelocity(
-                    context,
-                    self.center,
-                    targetPosition,
-                    draggingAcceleration
-                );
-            }
-
-            // 物理演算
-            // 空気抵抗
-            velocity = mulV2(velocity, unit(0.95));
-            if (isNaN(withoutUnit(velocity[0]))) {
-                velocity[0] = unit(0, meterParSeconds);
-            }
-            if (isNaN(withoutUnit(velocity[1]))) {
-                velocity[1] = unit(0, meterParSeconds);
-            }
-            // 移動
-            position = addV2(position, mulV2(context.frameTimeSpan, velocity));
-
-            // スタイルを設定
-            if (selfRect) {
-                const leftTop = subV2(
-                    position,
-                    mulV2(
-                        vector2(selfRect.width, selfRect.height),
-                        mul(meterParPx, unit(0.5))
-                    )
-                );
-
-                qrImageContainer.style.left = toCssPosition(leftTop[0]);
-                qrImageContainer.style.top = toCssPosition(leftTop[1]);
-            }
-        };
         qrButton.querySelector("input")?.addEventListener("click", function () {
             if (this.checked) {
                 document
@@ -530,9 +195,9 @@ async function asyncMain() {
                             otherCheckbox.checked = false;
                         }
                     });
-                addRenderer(selfAnimator);
+                animator.start();
             } else {
-                removeRenderer(selfAnimator);
+                animator.stop();
             }
         });
 

@@ -157,6 +157,8 @@ export type seconds = { s: _1 };
 export const seconds: Id<seconds> = id;
 export type meter = { m: _1 };
 export const meter: Id<meter> = id;
+export type kilogram = { kg: _1 };
+export const kilogram: Id<kilogram> = id;
 
 // -------------- 標準 API 拡張 --------------
 export function add<u extends UnitKind>(n1: numberWith<u>, n2: numberWith<u>) {
@@ -177,6 +179,9 @@ export function div<u1 extends UnitKind, u2 extends UnitKind>(
 ) {
     return withUnit<DivU<u1, u2>>(withoutUnit(n1) / withoutUnit(n2), id);
 }
+export function neg<u extends UnitKind>(n: numberWith<u>) {
+    return withUnit<u>(-withoutUnit(n), id);
+}
 export function lt<u extends UnitKind>(n1: numberWith<u>, n2: numberWith<u>) {
     return withoutUnit(n1) < withoutUnit(n2);
 }
@@ -185,4 +190,7 @@ export function sqrt<u extends UnitKind>(x: numberWith<MulU<u, u>>) {
 }
 export function max<u extends UnitKind>(x1: numberWith<u>, x2: numberWith<u>) {
     return withUnit<u>(Math.max(withoutUnit(x1), withoutUnit(x2)), id);
+}
+export function min<u extends UnitKind>(x1: numberWith<u>, x2: numberWith<u>) {
+    return withUnit<u>(Math.min(withoutUnit(x1), withoutUnit(x2)), id);
 }
